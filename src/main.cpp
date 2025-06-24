@@ -1,46 +1,78 @@
 #include <Arduino.h>
-#include "blink.h"
 #include "haptics.h"
-#include "blocking_blink.h"
+
+bool prompt_shown = false;
+
+unsigned long get_duration_from_user() {
+  String input = "";
+  Serial.println("Enter duration in seconds (e.g., 10):");
+  while (true) {
+    if (Serial.available() > 0) {
+      char c = Serial.read();
+      if (c == '\n' || c == '\r') {
+        if (input.length() > 0) break;
+      } else if (isDigit(c)) {
+        input += c;
+        Serial.print(c); // Echo back
+      }
+    }
+  }
+  Serial.println();
+  return input.toInt() * 1000UL; // Convert seconds to milliseconds
+}
+
+void loop_haptics_with_interrupt(unsigned long duration_ms) {
+  // Clear any leftover characters before starting
+  while (Serial.available() > 0) Serial.read();
+
+  unsigned long start = millis();
+  Serial.println("Haptics running. Press any key to stop early.");
+  while (millis() - start < duration_ms) {
+    haptics_fire();
+    delay(50);
+
+    if (Serial.available() > 0) {
+      while (Serial.available() > 0) Serial.read();
+      Serial.println("Haptics interrupted by user.");
+      break;
+    }
+  }
+}
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) { ; } // Wait for Serial to connect (needed for some boards)
-  haptics_setup();    // Uncomment the following line to run haptics
-
-  /********** For debugging purposes **********/
-  // blink_setup();    // Uncomment the following line to setup blinking
-  // blocking_blink_setup(); // Uncomment the following line to blocking blink
+  while (!Serial) { ; }
+  haptics_setup();
 }
 
 void loop() {
-  // Uncomment the following line to run haptics
   if (!haptics_available) {
     Serial.println("Retrying DRV2605...");
     haptics_retry();
-    delay(1000); // Wait before retrying again
+    delay(1000);
+    return;
   }
 
-  // This is to run haptics in a loop
-  haptics_loop();
+  if (!prompt_shown) {
+    Serial.println("Enter a haptic sequence to run (1-6), or 'L' for a long looped haptic:");
+    prompt_shown = true;
+  }
 
-//   // This is to trigger haptics with user input
-//   if (Serial.available() > 0) {
-//     char c = Serial.read();
-//     if (c == ' ') {
-//       Serial.println("Spacebar pressed! Firing haptics sequence...");
-//       haptics_fire();
-//     }
-//   }
+  if (Serial.available() > 0) {
+    char input = Serial.read();
+    if (input >= '1' && input <= '6') {
+      uint8_t pattern_id = input - '0';
+      haptics_set_pattern(pattern_id);
+      haptics_fire();
+      prompt_shown = false;
+    } else if (input == 'L' || input == 'l') {
+      haptics_set_pattern(1); // Example: use pattern 1 for looping
+      unsigned long duration = get_duration_from_user();
+      loop_haptics_with_interrupt(duration);
+      prompt_shown = false;
+    }
+    while (Serial.available() > 0) Serial.read();
+  }
 
-  /********** For debugging purposes **********/
-  // Uncomment the following line to blocking blink
-  // blocking_blink_loop();
-
-  // Uncomment the following lines to blink without blocking
-  // blink_loop();
-  // Serial.println(get_led_state() ? "LED ON" : "LED OFF");
-  // delay(500);
-
-  delay(1000);
+  delay(500);
 }
