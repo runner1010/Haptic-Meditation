@@ -42,10 +42,40 @@ void haptics_setup() {
   drv.useERM();
   drv.setMode(DRV2605_MODE_INTTRIG);
   drv.selectLibrary(1);
-  drv.setWaveform(0, 1);  // Strong click
-  drv.setWaveform(1, 2);  // Sharp click
-  drv.setWaveform(2, 47); // Ramp up
-  drv.setWaveform(3, 0);  // End of sequence
+}
+
+void haptics_set_pattern(uint8_t pattern_id) {
+  const uint8_t* pattern = nullptr;
+
+  switch (pattern_id) {
+    case 1:
+      pattern = test_1;
+      break;
+    case 2:
+      pattern = test_2;
+      break;
+    case 3:
+      pattern = test_3;
+      break;
+    case 4:
+      pattern = test_4;
+      break;
+    case 5:
+      pattern = test_5;
+      break;
+    case 6:
+      pattern = test_6;
+      break;
+    default:
+      pattern = test_7;
+      break;
+  }
+
+  // Set up to 8 waveforms (DRV2605 supports 8 slots)
+  for (uint8_t i = 0; i < 8; i++) {
+    drv.setWaveform(i, pattern[i]);
+    if (pattern[i] == 0) break; // End of sequence
+  }
 }
 
 // Call this if haptics_available is false
