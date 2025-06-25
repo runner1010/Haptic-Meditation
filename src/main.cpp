@@ -9,7 +9,7 @@ void setup() {
   Serial.begin(115200);
   while (!Serial) { ; }
   haptics_setup();
-  delay(5000); // Allow time for the haptics setup to complete
+  delay(10000); // Allow time for the haptics setup to complete
 }
 
 //Main Loop
@@ -42,18 +42,25 @@ void loop() {
     if (Serial.available() > 0) {
       char c = Serial.read();
       if (c == 'y' || c == 'Y') {
+        // Clear any leftover characters (like newline) from the serial buffer
+        while (Serial.available() > 0) Serial.read();
+
         Serial.println("Press any key to stop early...");
         unsigned long total_time = duration * 60000UL; // duration in minutes to ms
         unsigned long start_time = millis();
-        while (millis() - start_time < total_time) {
-          trigger_haptic_pattern(haptic_pattern, pattern_length);
-          if (Serial.available() > 0) {
-            Serial.read(); // Clear the input
-            Serial.println("Session ended early by user.");
-            break;
-          }
+        volatile bool stop_flag = false;
+        while (millis() - start_time < total_time && !stop_flag) {
+            trigger_haptic_pattern(haptic_pattern, pattern_length, &stop_flag);
+            if (stop_flag) {
+                Serial.println("*******************************");
+                Serial.println("Session ended early by user!");
+                Serial.println("*******************************");
+                break;
+            }
         }
-        Serial.println("Session complete.");
+        if (!stop_flag) {
+            Serial.println("Session complete.");
+        }
         prompt_shown = false; // Allow new session
         break;
       } else if (c == 'n' || c == 'N') {

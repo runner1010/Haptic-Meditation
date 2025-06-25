@@ -8,9 +8,12 @@ Adafruit_DRV2605 drv;
 bool haptics_available = false;
 
 //Haptic Feedback Type
-const uint8_t Click[] = {1,0};
-const uint8_t Buzz[] = {47,0};
-const uint8_t Hum[] = {64,0};
+const uint8_t Waveform_1[] = {17,0}; //Strong Click
+const uint8_t Waveform_2[] = {24,0};  //Sharp Tick
+const uint8_t Waveform_3[] = {4,0}; //Sharp Click
+
+// Minimum allowed delay between triggers
+const float MIN_DELAY_MS = 10.0;
 
 //Setup Connection to DRV2605
 void haptics_setup() {
@@ -34,17 +37,17 @@ void haptics_retry() {
 }
 
 
-void trigger_haptic_pattern(uint8_t haptic_type, uint8_t pattern_length) {
+void trigger_haptic_pattern(uint8_t haptic_type, uint8_t pattern_length, volatile bool* stop_flag) {
     // Initialize the DRV2605 waveform 
     const uint8_t* pattern = nullptr;
-    if (haptic_type == 1) { // Tap
-        pattern = Click;
-    } else if (haptic_type == 2) { // Buzz
-        pattern = Buzz;
-    } else if (haptic_type == 3) { // Hum
-        pattern = Hum;
+    if (haptic_type == 1) {
+        pattern = Waveform_1;
+    } else if (haptic_type == 2) {
+        pattern = Waveform_2;
+    } else if (haptic_type == 3) {
+        pattern = Waveform_3;
     } else {
-        pattern = Click; // Default
+        pattern = Waveform_1; // Default
     }
     // Set up to 8 waveforms (DRV2605 supports 8 slots)
     for (uint8_t i = 0; i < 8; i++) {
@@ -61,30 +64,66 @@ void trigger_haptic_pattern(uint8_t haptic_type, uint8_t pattern_length) {
         default: steps = 10; break;
     }
 
-    // Start and end delays in ms (spread apart to close)
     float start_delay = 1000.0; // ms
     float end_delay = 50.0;     // ms
 
-    // Ramp up
+    // Ramp up (logarithmic)
+    Serial.println("Ramp up...");
     for (uint8_t i = 0; i < steps; i++) {
+        if (*stop_flag) return;
         float ratio = (float)i / (steps - 1);
         float delay_ms = start_delay * pow(end_delay / start_delay, ratio);
+        if (delay_ms < MIN_DELAY_MS) delay_ms = MIN_DELAY_MS;
         drv.go();
-        delay((unsigned long)delay_ms);
+        unsigned long t0 = millis();
+        while (millis() - t0 < (unsigned long)delay_ms) {
+            if (Serial.available() > 0) {
+                Serial.read();
+                *stop_flag = true;
+                return;
+            }
+        }
     }
 
-    // Pause (same total duration as ramp)
-    delay((unsigned long)(steps * start_delay / 2));
+    // Pause
+    Serial.println("Pause...");
+    unsigned long pause_time = (unsigned long)(steps * start_delay / 2);
+    unsigned long pause_start = millis();
+    while (millis() - pause_start < pause_time) {
+        if (Serial.available() > 0) {
+            Serial.read();
+            *stop_flag = true;
+            return;
+        }
+    }
 
-    // Ramp down
+    // Ramp down (logarithmic)
+    Serial.println("Ramp down...");
     for (uint8_t i = 0; i < steps; i++) {
+        if (*stop_flag) return;
         float ratio = (float)i / (steps - 1);
         float delay_ms = end_delay * pow(start_delay / end_delay, ratio);
+        if (delay_ms < MIN_DELAY_MS) delay_ms = MIN_DELAY_MS;
         drv.go();
-        delay((unsigned long)delay_ms);
+        unsigned long t0 = millis();
+        while (millis() - t0 < (unsigned long)delay_ms) {
+            if (Serial.available() > 0) {
+                Serial.read();
+                *stop_flag = true;
+                return;
+            }
+        }
     }
 
-    // Pause (same total duration as ramp)
-    delay((unsigned long)(steps * start_delay / 2));
+    // Pause
+    Serial.println("Pause...");
+    pause_start = millis();
+    while (millis() - pause_start < pause_time) {
+        if (Serial.available() > 0) {
+            Serial.read();
+            *stop_flag = true;
+            return;
+        }
+    }
 }
 

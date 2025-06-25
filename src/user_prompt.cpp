@@ -3,9 +3,9 @@
 
 uint8_t get_haptic_pattern() {
   Serial.println("Select haptic pattern:");
-  Serial.println("1 - Tap");
-  Serial.println("2 - Buzz");
-  Serial.println("3 - Hum");
+  Serial.println("1 - Waveform_1");
+  Serial.println("2 - Waveform_2");
+  Serial.println("3 - Waveform_3");
   while (true) {
     if (Serial.available() > 0) {
       char c = Serial.read();
@@ -36,8 +36,8 @@ uint8_t get_pattern_length() {
 uint8_t get_duration() {
   Serial.println("Select duration:");
   Serial.println("1 - Beginner (1 minute)");
-  Serial.println("2 - Intermediate (5 minutes)");
-  Serial.println("3 - Advanced (10 minutes)");
+  Serial.println("2 - Intermediate (2 minutes)");
+  Serial.println("3 - Advanced (3 minutes)");
   while (true) {
     if (Serial.available() > 0) {
       char c = Serial.read();
