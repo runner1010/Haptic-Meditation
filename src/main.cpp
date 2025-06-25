@@ -1,51 +1,25 @@
 #include <Arduino.h>
 #include "haptics.h"
+#include "user_prompt.h"
 
 bool prompt_shown = false;
 
-unsigned long get_duration_from_user() {
-  String input = "";
-  Serial.println("Enter duration in seconds (e.g., 10):");
-  while (true) {
-    if (Serial.available() > 0) {
-      char c = Serial.read();
-      if (c == '\n' || c == '\r') {
-        if (input.length() > 0) break;
-      } else if (isDigit(c)) {
-        input += c;
-        Serial.print(c); // Echo back
-      }
-    }
-  }
-  Serial.println();
-  return input.toInt() * 1000UL; // Convert seconds to milliseconds
-}
-
-void loop_haptics_with_interrupt(unsigned long duration_ms) {
-  // Clear any leftover characters before starting
-  while (Serial.available() > 0) Serial.read();
-
-  unsigned long start = millis();
-  Serial.println("Haptics running. Press any key to stop early.");
-  while (millis() - start < duration_ms) {
-    haptics_fire();
-    delay(50);
-
-    if (Serial.available() > 0) {
-      while (Serial.available() > 0) Serial.read();
-      Serial.println("Haptics interrupted by user.");
-      break;
-    }
-  }
-}
-
+// Setup
 void setup() {
   Serial.begin(115200);
   while (!Serial) { ; }
   haptics_setup();
+  delay(5000); // Allow time for the haptics setup to complete
 }
 
+//Main Loop
 void loop() {
+  //initializes variables for haptic feedback
+  static uint8_t haptic_pattern = 1;
+  static uint8_t pattern_length = 1;
+  static uint8_t duration = 1;
+
+  //Checks for haptic connection
   if (!haptics_available) {
     Serial.println("Retrying DRV2605...");
     haptics_retry();
@@ -53,26 +27,42 @@ void loop() {
     return;
   }
 
+  // Get user input for haptic feedback settings
   if (!prompt_shown) {
-    Serial.println("Enter a haptic sequence to run (1-6), or 'L' for a long looped haptic:");
+    show_main_prompt();
+    haptic_pattern = get_haptic_pattern();
+    pattern_length = get_pattern_length();
+    duration = get_duration();
     prompt_shown = true;
   }
 
-  if (Serial.available() > 0) {
-    char input = Serial.read();
-    if (input >= '1' && input <= '6') {
-      uint8_t pattern_id = input - '0';
-      haptics_set_pattern(pattern_id);
-      haptics_fire();
-      prompt_shown = false;
-    } else if (input == 'L' || input == 'l') {
-      haptics_set_pattern(1); // Example: use pattern 1 for looping
-      unsigned long duration = get_duration_from_user();
-      loop_haptics_with_interrupt(duration);
-      prompt_shown = false;
+  // Ask user if ready to start
+  Serial.println("Ready to start? (y/n)");
+  while (true) {
+    if (Serial.available() > 0) {
+      char c = Serial.read();
+      if (c == 'y' || c == 'Y') {
+        Serial.println("Press any key to stop early...");
+        unsigned long total_time = duration * 60000UL; // duration in minutes to ms
+        unsigned long start_time = millis();
+        while (millis() - start_time < total_time) {
+          trigger_haptic_pattern(haptic_pattern, pattern_length);
+          if (Serial.available() > 0) {
+            Serial.read(); // Clear the input
+            Serial.println("Session ended early by user.");
+            break;
+          }
+        }
+        Serial.println("Session complete.");
+        prompt_shown = false; // Allow new session
+        break;
+      } else if (c == 'n' || c == 'N') {
+        Serial.println("Cancelled. Restarting prompt.");
+        prompt_shown = false;
+        break;
+      }
     }
-    while (Serial.available() > 0) Serial.read();
   }
 
-  delay(500);
+  delay(500); // Prevents spamming the prompts
 }

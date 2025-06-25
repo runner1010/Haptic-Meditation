@@ -2,35 +2,19 @@
 #include <Wire.h>
 #include <Adafruit_DRV2605.h>
 #include "haptics.h"
+#include <math.h>
 
 Adafruit_DRV2605 drv;
 bool haptics_available = false;
 
-// Example patterns: each array can have up to 8 waveforms, ending with 0
-const uint8_t pattern_strong_click[] = {1, 0};                // Single strong click
-const uint8_t pattern_sharp_click[]  = {2, 0};                // Single sharp click
-const uint8_t pattern_ramp_up[]      = {47, 0};               // Single ramp up
-const uint8_t pattern_combo[]        = {1, 2, 47, 0};         // Strong, sharp, ramp up
-const uint8_t pattern_double_click[] = {1, 1, 0};             // Two strong clicks
-const uint8_t pattern_triple_combo[] = {1, 2, 47, 2, 0};      // Strong, sharp, ramp up, sharp
-const uint8_t Buzz_1[] = {47, 0};            // Another strong click
-const uint8_t pattern_long_buzz[] = {47, 47, 47, 47, 47, 47, 47, 0}; // 7 ramp up buzzes
+//Haptic Feedback Type
+const uint8_t Click[] = {1,0};
+const uint8_t Buzz[] = {47,0};
+const uint8_t Hum[] = {64,0};
 
-const uint8_t test_1[] = {52,52,52,52,52,52,52,0};
-const uint8_t test_2[] = {51,50,49,48,47,0};
-const uint8_t test_3[] = {47, 0, 48, 0, 47, 0, 48, 0};
-const uint8_t test_4[] = {47, 0, 70, 0, 48, 0, 70, 0};
-const uint8_t test_5[] = {47, 48, 47, 48, 0};
-const uint8_t test_6[] = {1, 0, 1, 0, 1, 0, 0};
-const uint8_t test_7[] = {83,71,83,71,83,71,0};
-
-
-
-
-
+//Setup Connection to DRV2605
 void haptics_setup() {
-  // Set custom I2C pins (change 6 and 7 to your actual SDA/SCL pins)
-  Wire.begin(6, 7);
+  Wire.begin(6, 7); // Set I2C pins (SDA/SCL pins)
 
   if (!drv.begin()) {
     haptics_available = false;
@@ -44,62 +28,63 @@ void haptics_setup() {
   drv.selectLibrary(1);
 }
 
-void haptics_set_pattern(uint8_t pattern_id) {
-  const uint8_t* pattern = nullptr;
-
-  switch (pattern_id) {
-    case 1:
-      pattern = test_1;
-      break;
-    case 2:
-      pattern = test_2;
-      break;
-    case 3:
-      pattern = test_3;
-      break;
-    case 4:
-      pattern = test_4;
-      break;
-    case 5:
-      pattern = test_5;
-      break;
-    case 6:
-      pattern = test_6;
-      break;
-    default:
-      pattern = test_7;
-      break;
-  }
-
-  // Set up to 8 waveforms (DRV2605 supports 8 slots)
-  for (uint8_t i = 0; i < 8; i++) {
-    drv.setWaveform(i, pattern[i]);
-    if (pattern[i] == 0) break; // End of sequence
-  }
-}
-
 // Call this if haptics_available is false
 void haptics_retry() {
   haptics_setup();
 }
 
-// Call this to trigger the haptic motor every second
-void haptics_loop() {
-  static unsigned long previousHapticMillis = 0;
-  const long hapticInterval = 1000;
-  if (!haptics_available) return;
 
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousHapticMillis >= hapticInterval) {
-    previousHapticMillis = currentMillis;
-    drv.go();
-  }
-}
+void trigger_haptic_pattern(uint8_t haptic_type, uint8_t pattern_length) {
+    // Initialize the DRV2605 waveform 
+    const uint8_t* pattern = nullptr;
+    if (haptic_type == 1) { // Tap
+        pattern = Click;
+    } else if (haptic_type == 2) { // Buzz
+        pattern = Buzz;
+    } else if (haptic_type == 3) { // Hum
+        pattern = Hum;
+    } else {
+        pattern = Click; // Default
+    }
+    // Set up to 8 waveforms (DRV2605 supports 8 slots)
+    for (uint8_t i = 0; i < 8; i++) {
+        drv.setWaveform(i, pattern[i]);
+        if (pattern[i] == 0) break; // End of sequence
+    }
 
-// Call this to trigger the haptic motor immediately
-void haptics_fire() {
-  if (haptics_available) {
-    drv.go();
-  }
+    // Define ramp steps based on pattern_length (1=short, 2=medium, 3=long)
+    uint8_t steps = 0;
+    switch (pattern_length) {
+        case 1: steps = 10; break; // Beginner
+        case 2: steps = 20; break; // Intermediate
+        case 3: steps = 40; break; // Advanced
+        default: steps = 10; break;
+    }
+
+    // Start and end delays in ms (spread apart to close)
+    float start_delay = 1000.0; // ms
+    float end_delay = 50.0;     // ms
+
+    // Ramp up
+    for (uint8_t i = 0; i < steps; i++) {
+        float ratio = (float)i / (steps - 1);
+        float delay_ms = start_delay * pow(end_delay / start_delay, ratio);
+        drv.go();
+        delay((unsigned long)delay_ms);
+    }
+
+    // Pause (same total duration as ramp)
+    delay((unsigned long)(steps * start_delay / 2));
+
+    // Ramp down
+    for (uint8_t i = 0; i < steps; i++) {
+        float ratio = (float)i / (steps - 1);
+        float delay_ms = end_delay * pow(start_delay / end_delay, ratio);
+        drv.go();
+        delay((unsigned long)delay_ms);
+    }
+
+    // Pause (same total duration as ramp)
+    delay((unsigned long)(steps * start_delay / 2));
 }
 
